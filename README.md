@@ -30,6 +30,22 @@ Then add the key from [`keys.json`](keys.json) to the `global` section of `~/.co
 
 `Alt+X` is not bound by Herdr by default, but it is taken from whatever program has focus. Pick another key if you need it.
 
+## Settings
+
+Optional. Create `herdr-clear-pane/settings.json` in `$XDG_CONFIG_HOME` (`~/.config` when it isn't set); it is read on every key press, so edits apply at once. It lives outside Herdr's app folder so you can keep it in a dotfiles repo.
+
+```json
+{ "toast": "skipped" }
+```
+
+| `toast` | Shows a toast when |
+| --- | --- |
+| `"never"` (default) | never |
+| `"skipped"` | nothing was cleared because a program keeps its own screen ("less keeps its own screen.") |
+| `"always"` | the pane was cleared, and also in the skipped case |
+
+A missing file means the defaults. An invalid file or value shows a warning toast and uses the defaults.
+
 ## Skipped programs
 
 An agent is detected from Herdr's program table. Everything else is matched by the foreground process name, from the `KEEPS_OWN_SCREEN` list in [`mods/clear-pane/main.js`](mods/clear-pane/main.js):
@@ -47,9 +63,10 @@ The Herdr TUI's `clear_pane` calls the terminal engine directly: it keeps the cu
 
 ## Limits
 
+- `XDG_CONFIG_HOME` is read through Herdr's `exec`, so it is the value Herdr runs programs with. A relative value is ignored. A non-default value is untested here (it is unset on the test machine); if it isn't picked up, the mod falls back to `~/.config`.
 - **Linux only.** It finds the terminal's tty through `/proc/<pid>/fd/0` and writes to `/dev/pts/*`. macOS and Windows are not supported.
 - Tested on Herdr app 0.1.13 and herdr-core 0.1.18, with zsh.
-- The mod runs programs: `hc get`, `readlink`, `sh` (a single `printf` to the tty) and `hc keys`. The only thing it reads is the terminal's `/proc/<pid>/fd/0` link, and it uses no network.
+- The mod runs programs: `hc get`, `readlink`, `sh` (a single `printf` to the tty) and `hc keys`. It reads the terminal's `/proc/<pid>/fd/0` link, `$XDG_CONFIG_HOME` (through `sh`) and `settings.json`, and it uses no network.
 
 ## License
 

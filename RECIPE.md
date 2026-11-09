@@ -15,13 +15,14 @@ Nothing, normally. Pressing `Alt+X` clears the focused terminal, history include
 - Otherwise it writes `ESC c` to the terminal's tty, so the foreground program receives no input.
 - If the foreground program is `zsh`, `bash` or `fish`, it then presses `ctrl+l` through `hc keys` so the shell redraws its prompt.
 - With no focused terminal (a mod pane), it does nothing.
+- It reads `herdr-clear-pane/settings.json` from `$XDG_CONFIG_HOME` (absolute values only, else `~/.config`) on each run: `{ "toast": "never" | "skipped" | "always" }`, default `"never"`. `"skipped"` posts an info toast ("Pane not cleared", "<program> keeps its own screen.") when nothing was cleared; `"always"` also posts a success toast ("Pane cleared"). A missing file means the defaults; invalid JSON or an unknown value posts a warning toast and uses the defaults.
 
 ## Built from
 
 - `mods/clear-pane/mod.json`: `{ "place": "none", "overlay": { "kind": "popup", "frame": "none", "width": 1, "height": 1 } }`. The mod appears only as a 1px frameless popup opened by `mod.open`.
 - `mods/clear-pane/main.js`: a `View` whose `init` reads `focused()`, then in `cx.spawn` runs `hc get <t>` (JSON with `pid` and `foreground.name`), `readlink /proc/<pid>/fd/0` (must start with `/dev/pts/`), `sh -c 'printf "\033c" > "$1"' sh <tty>`, and `hc keys <t> ctrl+l`. `render` returns an empty `div()`.
 - `keys.json`: `"alt-x": "mod.open:clear-pane"` in `global`.
-- `herdr` functions used: `focused`, `terminals`, `hc`, `exec`, `props`, `closeOverlay`, `notify`.
+- `herdr` functions used: `focused`, `terminals`, `hc`, `exec`, `props`, `closeOverlay`, `notify`, `readTextFile`, `home`.
 
 ## Watch out
 
@@ -39,3 +40,4 @@ Nothing, normally. Pressing `Alt+X` clears the focused terminal, history include
 - With `less`, `vim`, `nvim` or `nano` in the foreground, `Alt+X` leaves the screen unchanged.
 - With Claude Code in the foreground, `Alt+X` leaves the screen unchanged.
 - Scrolling up in the window after `Alt+X` shows no old output.
+- With `{ "toast": "skipped" }` and `less` in the foreground, `Alt+X` shows "Pane not cleared"; with `{ "toast": "always" }` at a shell it shows "Pane cleared"; with no config file it shows no toast.

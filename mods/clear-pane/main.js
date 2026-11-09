@@ -8,10 +8,13 @@
 // It does nothing while an agent, editor, pager or other full-screen program
 // is in the foreground: the reset would corrupt what they have drawn.
 //
+// Optional settings are read from herdr-clear-pane/settings.json in
+// $XDG_CONFIG_HOME, or in ~/.config when that isn't set.
+//
 // Linux only: the tty is found through /proc.
 
 import { View, div } from "gpui-kit";
-import { focused, terminals, hc, exec, closeOverlay, props, notify } from "herdr";
+import { focused, terminals, hc, exec, closeOverlay, props, notify, readTextFile, home } from "herdr";
 
 const SHELLS = ["zsh", "bash", "fish"];
 
@@ -23,6 +26,19 @@ const KEEPS_OWN_SCREEN = new Set([
   "htop", "btop", "top", "tmux", "screen", "lazygit", "yazi",
 ]);
 
+const SETTINGS_FILE = "herdr-clear-pane/settings.json";
+const TOAST_MODES = ["never", "skipped", "always"];
+
+/**
+ * @typedef {"never" | "skipped" | "always"} ToastMode
+ * `skipped` toasts only when nothing was cleared; `always` also toasts on success.
+ */
+
+/**
+ * @typedef {object} Config
+ * @property {ToastMode} toast
+ */
+
 /**
  * What `hc get <terminal>` reports, limited to the fields used here.
  * @typedef {object} TerminalInfo
@@ -31,14 +47,61 @@ const KEEPS_OWN_SCREEN = new Set([
  */
 
 /**
+ * @param {string} message
+ * @returns {void}
+ */
+function warn(message) {
+  notify({ title: "Clear pane", body: message, level: "warning" });
+}
+
+/**
+ * @returns {Promise<string>} `$XDG_CONFIG_HOME` when it is an absolute path
+ *   (the spec says to ignore anything else), otherwise `~/.config`.
+ */
+async function configHome() {
+  const result = await exec("sh", ["-c", 'printf %s "$XDG_CONFIG_HOME"']);
+  const xdg = result.stdout.trim();
+  return xdg.startsWith("/") ? xdg : `${home()}/.config`;
+}
+
+/**
+ * Missing file or invalid contents fall back to the defaults. The invalid
+ * ones are reported.
+ * @returns {Promise<Config>}
+ */
+async function loadConfig() {
+  /** @type {Config} */
+  const config = { toast: "never" };
+  const text = await readTextFile(`${await configHome()}/${SETTINGS_FILE}`);
+  if (text === null) return config;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    warn("settings.json is not valid JSON, using defaults.");
+    return config;
+  }
+  const toast = parsed?.toast;
+  if (toast === undefined) return config;
+  if (TOAST_MODES.includes(toast)) {
+    config.toast = toast;
+  } else {
+    warn("settings.json: toast is never, skipped or always.");
+  }
+  return config;
+}
+
+/**
  * @param {string} terminal Terminal address, e.g. "t14".
  * @param {TerminalInfo} info
- * @returns {boolean}
+ * @returns {string | null} The program that keeps its own screen, or null.
  */
 function keepsOwnScreen(terminal, info) {
   const program = terminals().find((t) => t.address === terminal)?.program;
+  if (program?.agent) return program.name ?? "An agent";
   const name = (info.foreground?.name ?? "").split(".")[0];
-  return Boolean(program?.agent) || KEEPS_OWN_SCREEN.has(name);
+  return KEEPS_OWN_SCREEN.has(name) ? name : null;
 }
 
 /**
@@ -56,16 +119,32 @@ async function ttyOf(pid) {
 
 /**
  * @param {string} terminal Terminal address, e.g. "t14".
- * @returns {Promise<void>}
+ * @returns {Promise<string | null>} The program that kept the terminal from
+ *   being cleared, or null when it was cleared.
  */
 async function clearPane(terminal) {
   /** @type {TerminalInfo} */
   const info = JSON.parse((await hc(["get", terminal])).stdout);
-  if (keepsOwnScreen(terminal, info)) return;
+  const program = keepsOwnScreen(terminal, info);
+  if (program) return program;
   const tty = await ttyOf(info.pid);
   await exec("sh", ["-c", "printf '\\033c' > \"$1\"", "sh", tty]);
   if (SHELLS.includes(info.foreground?.name)) {
     await hc(["keys", terminal, "ctrl+l"]);
+  }
+  return null;
+}
+
+/**
+ * @param {string | null} keptBy The result of `clearPane`.
+ * @param {ToastMode} mode
+ * @returns {void}
+ */
+function announce(keptBy, mode) {
+  if (keptBy === null) {
+    if (mode === "always") notify({ title: "Pane cleared", level: "success" });
+  } else if (mode !== "never") {
+    notify({ title: "Pane not cleared", body: `${keptBy} keeps its own screen.`, level: "info" });
   }
 }
 
@@ -82,7 +161,8 @@ export default class ClearPane extends View {
     if (!terminal) return done();
     cx.spawn(async () => {
       try {
-        await clearPane(terminal);
+        const config = await loadConfig();
+        announce(await clearPane(terminal), config.toast);
       } catch (error) {
         notify({ title: "Clear pane failed", body: error instanceof Error ? error.message : String(error), level: "error" });
       } finally {
