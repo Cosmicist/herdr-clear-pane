@@ -15,7 +15,7 @@ Nothing, normally. Pressing `Alt+X` clears the focused terminal, history include
 - Otherwise it writes `ESC c` to the terminal's tty, so the foreground program receives no input.
 - If the foreground program is `zsh`, `bash` or `fish`, it then presses `ctrl+l` through `hc keys` so the shell redraws its prompt.
 - With no focused terminal (a mod pane), it does nothing.
-- It reads `herdr-clear-pane/settings.json` from `$XDG_CONFIG_HOME` (absolute values only, else `~/.config`) on each run: `{ "toast": "never" | "skipped" | "always" }`, default `"never"`. `"skipped"` posts an info toast ("Pane not cleared", "<program> keeps its own screen.") when nothing was cleared; `"always"` also posts a success toast ("Pane cleared"). A missing file means the defaults; invalid JSON or an unknown value posts a warning toast and uses the defaults.
+- It reads `herdr-clear-pane/settings.json` from `$XDG_CONFIG_HOME` (absolute values only, else `~/.config`) on each run: `{ "toast": "never" | "skipped" | "always" }`, default `"never"`. `"skipped"` posts an info toast ("Pane not cleared", "<program> keeps its own screen.") when nothing was cleared; `"always"` also posts a success toast ("Pane cleared"). `"skip": ["name", ...]` adds process names to `KEEPS_OWN_SCREEN` (compared like the built-in ones: without anything after the first `.`). A missing file means the defaults; invalid JSON, an unknown `toast` value or a `skip` that is not a list of non-empty strings posts a warning toast and uses the defaults.
 
 ## Built from
 
@@ -40,4 +40,5 @@ Nothing, normally. Pressing `Alt+X` clears the focused terminal, history include
 - With `less`, `vim`, `nvim` or `nano` in the foreground, `Alt+X` leaves the screen unchanged.
 - With Claude Code in the foreground, `Alt+X` leaves the screen unchanged.
 - Scrolling up in the window after `Alt+X` shows no old output.
+- With `{ "skip": ["zsh"] }`, `Alt+X` at a zsh prompt leaves the screen unchanged.
 - With `{ "toast": "skipped" }` and `less` in the foreground, `Alt+X` shows "Pane not cleared"; with `{ "toast": "always" }` at a shell it shows "Pane cleared"; with no config file it shows no toast.

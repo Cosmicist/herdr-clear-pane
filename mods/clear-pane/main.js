@@ -37,7 +37,17 @@ const TOAST_MODES = ["never", "skipped", "always"];
 /**
  * @typedef {object} Config
  * @property {ToastMode} toast
+ * @property {string[]} skip Process names to leave alone, besides the built-in ones.
  */
+
+/**
+ * The comparable form of a process name: a ".basic"-style suffix is dropped.
+ * @param {string} name
+ * @returns {string}
+ */
+function baseName(name) {
+  return name.split(".")[0];
+}
 
 /**
  * What `hc get <terminal>` reports, limited to the fields used here.
@@ -71,7 +81,7 @@ async function configHome() {
  */
 async function loadConfig() {
   /** @type {Config} */
-  const config = { toast: "never" };
+  const config = { toast: "never", skip: [] };
   const text = await readTextFile(`${await configHome()}/${SETTINGS_FILE}`);
   if (text === null) return config;
 
@@ -82,12 +92,20 @@ async function loadConfig() {
     warn("settings.json is not valid JSON, using defaults.");
     return config;
   }
-  const toast = parsed?.toast;
-  if (toast === undefined) return config;
-  if (TOAST_MODES.includes(toast)) {
-    config.toast = toast;
-  } else {
-    warn("settings.json: toast is never, skipped or always.");
+  const { toast, skip } = parsed ?? {};
+  if (toast !== undefined) {
+    if (TOAST_MODES.includes(toast)) {
+      config.toast = toast;
+    } else {
+      warn("settings.json: toast is never, skipped or always.");
+    }
+  }
+  if (skip !== undefined) {
+    if (Array.isArray(skip) && skip.every((name) => typeof name === "string" && name !== "")) {
+      config.skip = skip.map(baseName);
+    } else {
+      warn("settings.json: skip must be a list of names.");
+    }
   }
   return config;
 }
@@ -95,13 +113,14 @@ async function loadConfig() {
 /**
  * @param {string} terminal Terminal address, e.g. "t14".
  * @param {TerminalInfo} info
+ * @param {string[]} extra Names from the settings, besides `KEEPS_OWN_SCREEN`.
  * @returns {string | null} The program that keeps its own screen, or null.
  */
-function keepsOwnScreen(terminal, info) {
+function keepsOwnScreen(terminal, info, extra) {
   const program = terminals().find((t) => t.address === terminal)?.program;
   if (program?.agent) return program.name ?? "An agent";
-  const name = (info.foreground?.name ?? "").split(".")[0];
-  return KEEPS_OWN_SCREEN.has(name) ? name : null;
+  const name = baseName(info.foreground?.name ?? "");
+  return KEEPS_OWN_SCREEN.has(name) || extra.includes(name) ? name : null;
 }
 
 /**
@@ -119,13 +138,14 @@ async function ttyOf(pid) {
 
 /**
  * @param {string} terminal Terminal address, e.g. "t14".
+ * @param {Config} config
  * @returns {Promise<string | null>} The program that kept the terminal from
  *   being cleared, or null when it was cleared.
  */
-async function clearPane(terminal) {
+async function clearPane(terminal, config) {
   /** @type {TerminalInfo} */
   const info = JSON.parse((await hc(["get", terminal])).stdout);
-  const program = keepsOwnScreen(terminal, info);
+  const program = keepsOwnScreen(terminal, info, config.skip);
   if (program) return program;
   const tty = await ttyOf(info.pid);
   await exec("sh", ["-c", "printf '\\033c' > \"$1\"", "sh", tty]);
@@ -162,7 +182,7 @@ export default class ClearPane extends View {
     cx.spawn(async () => {
       try {
         const config = await loadConfig();
-        announce(await clearPane(terminal), config.toast);
+        announce(await clearPane(terminal, config), config.toast);
       } catch (error) {
         notify({ title: "Clear pane failed", body: error instanceof Error ? error.message : String(error), level: "error" });
       } finally {

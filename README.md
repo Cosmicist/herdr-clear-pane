@@ -35,7 +35,7 @@ Then add the key from [`keys.json`](keys.json) to the `global` section of `~/.co
 Optional. Create `herdr-clear-pane/settings.json` in `$XDG_CONFIG_HOME` (`~/.config` when it isn't set); it is read on every key press, so edits apply at once. It lives outside Herdr's app folder so you can keep it in a dotfiles repo.
 
 ```json
-{ "toast": "skipped" }
+{ "toast": "skipped", "skip": ["ncdu", "k9s"] }
 ```
 
 | `toast` | Shows a toast when |
@@ -43,6 +43,8 @@ Optional. Create `herdr-clear-pane/settings.json` in `$XDG_CONFIG_HOME` (`~/.con
 | `"never"` (default) | never |
 | `"skipped"` | nothing was cleared because a program keeps its own screen ("less keeps its own screen.") |
 | `"always"` | the pane was cleared, and also in the skipped case |
+
+`skip` lists more process names to leave alone, on top of the built-in ones below. A name is matched against the foreground process name, ignoring anything after its first `.` (`vim.basic` counts as `vim`). To find a program's name, run `hc get <terminal>` while it is in the foreground and read `foreground.name`.
 
 A missing file means the defaults. An invalid file or value shows a warning toast and uses the defaults.
 
@@ -52,7 +54,7 @@ An agent is detected from Herdr's program table. Everything else is matched by t
 
 `vim` `nvim` `vi` `view` `vimdiff` `nano` `emacs` `hx` `kak` `micro` `less` `more` `most` `man` `bat` `htop` `btop` `top` `tmux` `screen` `lazygit` `yazi`
 
-A full-screen program that is not on the list will be reset. Add its process name to the list.
+A full-screen program that is not on the list will be reset. Add its process name to `skip` in your settings.
 
 ## Differences from the TUI's `clear_pane`
 
