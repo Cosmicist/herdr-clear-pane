@@ -1,0 +1,5 @@
+{
+  "global": {
+    "alt-x": "mod.open:clear-pane"
+  }
+}
